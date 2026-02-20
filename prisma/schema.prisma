@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  imagePath   String
+  description String?
+  locationLat Float?
+  locationLng Float?
+  breed       String?
+  age         String?
+  animalType  String?
+  tags        String? // JSON string
+  status      String   @default("REPORTED") // REPORTED, IN_REVIEW, RESCUED, REUNITED
+
+  // Details
+  condition   String? // JSON string
+  collar      Boolean  @default(false)
+  privacy     Boolean  @default(false) // true = obfuscated/approx location shown to public
+
+  createdAt   DateTime @default(now())
+
+  updates     ReportUpdate[]
+  helpOffers  HelpOffer[]
+}
+
+model ReportUpdate {
+  id          Int      @id @default(autoincrement())
+  type        String   @default("COMMENT") // COMMENT, OFFICIAL, SIGHTING
+  text        String
+  imagePath   String?
+  isApproved  Boolean  @default(true) // Auto-approve for MVP
+  createdAt   DateTime @default(now())
+  reportId    Int
+  report      Report   @relation(fields: [reportId], references: [id])
+}
+
+model HelpOffer {
+  id          Int      @id @default(autoincrement())
+  name        String
+  contact     String?  // phone or email combined
+  message     String?
+  helpType    String?  // foster, transport, donate
+  availability String?
+  createdAt   DateTime @default(now())
+  reportId    Int
+  report      Report   @relation(fields: [reportId], references: [id])
+}
+
+model Vet {
+  id          Int     @id @default(autoincrement())
+  name        String
+  address     String
+  phone       String
+  hours       String?
+  locationLat Float?
+  locationLng Float?
+  website     String?
+  specialties String? // JSON string e.g. ["cats", "dogs", "surgery"]
+  emergency   Boolean @default(false)
+  verified    Boolean @default(false)
+}
