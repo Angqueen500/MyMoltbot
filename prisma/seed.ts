@@ -5,6 +5,9 @@ const prisma = new PrismaClient()
 
 async function main() {
   // Clear existing data to avoid duplicates in seed dev
+  // Delete related models first
+  await prisma.comment.deleteMany();
+  await prisma.contactRequest.deleteMany();
   await prisma.report.deleteMany();
   await prisma.vet.deleteMany();
 
@@ -16,6 +19,9 @@ async function main() {
       hours: 'Mon-Fri 9am-6pm',
       locationLat: 40.7128,
       locationLng: -74.0060,
+      specialties: JSON.stringify(['General Practice', 'Dental']),
+      emergency: false,
+      verified: true
     },
     {
       name: 'Happy Paws Hospital',
@@ -24,6 +30,9 @@ async function main() {
       hours: '24/7 Emergency',
       locationLat: 34.0522,
       locationLng: -118.2437,
+      specialties: JSON.stringify(['Emergency', 'Surgery', 'Orthopedics']),
+      emergency: true,
+      verified: true
     },
     {
       name: 'Uptown Pet Care',
@@ -32,6 +41,9 @@ async function main() {
       hours: 'Mon-Sat 10am-8pm',
       locationLat: 40.7580,
       locationLng: -73.9855,
+      specialties: JSON.stringify(['Cats', 'Exotics']),
+      emergency: false,
+      verified: false
     },
   ];
 
@@ -46,7 +58,7 @@ async function main() {
       breed: 'Beagle',
       animalType: 'Dog',
       age: 'Adult',
-      status: 'open',
+      status: 'REPORTED',
       tags: JSON.stringify(['Friendly', 'Hungry']),
       locationLat: 40.7200,
       locationLng: -74.0100,
@@ -57,7 +69,7 @@ async function main() {
       breed: 'Tabby',
       animalType: 'Cat',
       age: 'Kitten',
-      status: 'open',
+      status: 'IN_REVIEW',
       tags: JSON.stringify(['Scared', 'Kitten']),
       locationLat: 40.7150,
       locationLng: -74.0020,
@@ -68,7 +80,7 @@ async function main() {
       breed: 'Golden Retriever',
       animalType: 'Dog',
       age: 'Adult',
-      status: 'rescued',
+      status: 'RESCUED',
       tags: JSON.stringify(['Friendly', 'No Collar']),
       locationLat: 34.0500,
       locationLng: -118.2400,
@@ -76,7 +88,25 @@ async function main() {
   ];
 
   for (const report of reports) {
-    await prisma.report.create({ data: report });
+    const r = await prisma.report.create({ data: report });
+
+    // Add sample comments
+    if (r.status === 'IN_REVIEW') {
+        await prisma.comment.create({
+            data: {
+                text: 'A volunteer is on the way to check the location.',
+                reportId: r.id
+            }
+        });
+    }
+    if (r.status === 'RESCUED') {
+        await prisma.comment.create({
+            data: {
+                text: 'Update: The owner has been found! Reunited safely.',
+                reportId: r.id
+            }
+        });
+    }
   }
 }
 

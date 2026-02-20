@@ -1,12 +1,15 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Phone, Clock, MapPin, Navigation, Search, List, Map as MapIcon } from 'lucide-react';
+import { Phone, Clock, MapPin, Navigation, Search, List, Map as MapIcon, Copy, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
+import useGeolocation from '@/hooks/useGeolocation';
+import { getDistanceFromLatLonInKm } from '@/lib/distance';
 
 const Map = dynamic(() => import('@/components/Map'), { ssr: false });
 
@@ -18,18 +21,40 @@ type Vet = {
   hours: string | null;
   locationLat: number | null;
   locationLng: number | null;
+  specialties: string | null;
+  emergency: boolean;
+  verified: boolean;
 };
 
 export default function VetsClient({ vets }: { vets: Vet[] }) {
   const [search, setSearch] = useState('');
   const [showMap, setShowMap] = useState(true);
+  const { addToast } = useToast();
+  const { location: userLocation } = useGeolocation();
 
-  const filteredVets = vets.filter(vet =>
-    vet.name.toLowerCase().includes(search.toLowerCase()) ||
-    vet.address.toLowerCase().includes(search.toLowerCase())
-  );
+  // Use useMemo instead of useEffect to derive state
+  const sortedVets = useMemo(() => {
+    let result = vets.filter(vet =>
+      vet.name.toLowerCase().includes(search.toLowerCase()) ||
+      vet.address.toLowerCase().includes(search.toLowerCase())
+    );
 
-  const markers = filteredVets
+    if (userLocation) {
+      result = [...result].sort((a, b) => {
+        const distA = (a.locationLat && a.locationLng) ? getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, a.locationLat, a.locationLng) : Infinity;
+        const distB = (b.locationLat && b.locationLng) ? getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, b.locationLat, b.locationLng) : Infinity;
+        return distA - distB;
+      });
+    }
+    return result;
+  }, [search, userLocation, vets]);
+
+  const copyAddress = (address: string) => {
+    navigator.clipboard.writeText(address);
+    addToast({ type: 'success', title: 'Address Copied' });
+  };
+
+  const markers = sortedVets
     .filter(v => v.locationLat != null && v.locationLng != null)
     .map(v => ({
       lat: v.locationLat!,
@@ -83,25 +108,44 @@ export default function VetsClient({ vets }: { vets: Vet[] }) {
           "flex-1 overflow-y-auto pr-1 space-y-3 scrollbar-hide",
           !showMap ? "block" : "hidden md:block"
         )}>
-          {filteredVets.length === 0 ? (
+          {sortedVets.length === 0 ? (
              <div className="text-center py-10 text-muted-foreground">
                No veterinarians found.
              </div>
           ) : (
-            filteredVets.map((vet) => (
+            sortedVets.map((vet) => (
               <Card key={vet.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-bold text-lg leading-tight">{vet.name}</h3>
+                      <div className="flex items-center gap-1">
+                        <h3 className="font-bold text-lg leading-tight">{vet.name}</h3>
+                        {vet.verified && <ShieldCheck className="w-4 h-4 text-blue-500" aria-label="Verified" />}
+                      </div>
                       <div className="flex items-start gap-2 text-sm text-muted-foreground mt-1">
                         <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                         <span>{vet.address}</span>
+                        <button onClick={() => copyAddress(vet.address)} className="text-muted-foreground hover:text-foreground">
+                          <Copy className="w-3 h-3" />
+                        </button>
                       </div>
+                      {userLocation && vet.locationLat && vet.locationLng && (
+                         <p className="text-xs text-muted-foreground mt-1 font-medium">
+                           {getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, vet.locationLat, vet.locationLng).toFixed(1)}km away
+                         </p>
+                      )}
                     </div>
-                    {vet.hours?.includes('24/7') && (
-                      <Badge variant="destructive" className="shrink-0 text-[10px]">Emergency</Badge>
-                    )}
+                    <div className="flex flex-col items-end gap-1">
+                        {vet.emergency && (
+                        <Badge variant="destructive" className="shrink-0 text-[10px] flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            24/7 Emergency
+                        </Badge>
+                        )}
+                        {vet.specialties && JSON.parse(vet.specialties).map((spec: string) => (
+                            <Badge key={spec} variant="secondary" className="text-[10px]">{spec}</Badge>
+                        ))}
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">

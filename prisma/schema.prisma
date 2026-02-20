@@ -20,8 +20,31 @@ model Report {
   age         String?
   animalType  String? // Added
   tags        String? // JSON string
-  status      String   @default("open") // open, rescued
+  status      String   @default("REPORTED") // REPORTED, IN_REVIEW, RESCUED
   createdAt   DateTime @default(now())
+
+  comments    Comment[]
+  contactRequests ContactRequest[]
+}
+
+model Comment {
+  id          Int      @id @default(autoincrement())
+  text        String
+  imagePath   String?
+  createdAt   DateTime @default(now())
+  reportId    Int
+  report      Report   @relation(fields: [reportId], references: [id])
+}
+
+model ContactRequest {
+  id          Int      @id @default(autoincrement())
+  name        String
+  phone       String?
+  email       String?
+  message     String?
+  createdAt   DateTime @default(now())
+  reportId    Int
+  report      Report   @relation(fields: [reportId], references: [id])
 }
 
 model Vet {
@@ -32,4 +55,8 @@ model Vet {
   hours       String?
   locationLat Float?
   locationLng Float?
+  website     String?
+  specialties String? // JSON string e.g. ["cats", "dogs", "surgery"]
+  emergency   Boolean @default(false)
+  verified    Boolean @default(false)
 }
