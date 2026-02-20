@@ -1,0 +1,33 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  imagePath   String
+  description String?
+  locationLat Float?
+  locationLng Float?
+  breed       String?
+  age         String?
+  status      String   @default("open") // open, rescued
+  createdAt   DateTime @default(now())
+}
+
+model Vet {
+  id          Int     @id @default(autoincrement())
+  name        String
+  address     String
+  phone       String
+  hours       String?
+  locationLat Float?
+  locationLng Float?
+}
