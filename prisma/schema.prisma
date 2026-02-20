@@ -18,6 +18,8 @@ model Report {
   locationLng Float?
   breed       String?
   age         String?
+  animalType  String? // Added
+  tags        String? // JSON string
   status      String   @default("open") // open, rescued
   createdAt   DateTime @default(now())
 }

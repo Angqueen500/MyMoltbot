@@ -21,6 +21,8 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const description = formData.get('description') as string;
+    const animalType = formData.get('animalType') as string;
+    const tags = formData.get('tags') as string;
     const lat = formData.get('lat') as string;
     const lng = formData.get('lng') as string;
 
@@ -58,11 +60,13 @@ export async function POST(request: Request) {
     const report = await prisma.report.create({
       data: {
         imagePath: `/uploads/${filename}`,
-        description: description || `Found a ${analysis.type} (${analysis.breed})`,
+        description: description || `Found a ${animalType || analysis.type} (${analysis.breed})`,
         locationLat: lat ? parseFloat(lat) : null,
         locationLng: lng ? parseFloat(lng) : null,
         breed: analysis.breed,
         age: analysis.age,
+        animalType: animalType || analysis.type,
+        tags: tags || "[]",
         status: 'open',
       },
     });
