@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Loader2, Camera, MapPin, Check, AlertTriangle, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Loader2, Camera, MapPin, Check, AlertTriangle, ChevronLeft, ChevronRight, X, Lock } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import Image from 'next/image';
 import { z } from 'zod';
 
@@ -36,7 +37,31 @@ export default function ReportPage() {
   const [animalType, setAnimalType] = useState('');
   const [conditionTags, setConditionTags] = useState<string[]>([]);
   const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [privacy, setPrivacy] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Load Draft
+  useEffect(() => {
+    const saved = localStorage.getItem('report_draft');
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            setDescription(data.description || '');
+            setAnimalType(data.animalType || '');
+            setConditionTags(data.conditionTags || []);
+            setPrivacy(data.privacy || false);
+            // File cannot be restored easily, so skip
+        } catch (e) {
+            console.error('Failed to load draft', e);
+        }
+    }
+  }, []);
+
+  // Save Draft
+  useEffect(() => {
+    const data = { description, animalType, conditionTags, privacy };
+    localStorage.setItem('report_draft', JSON.stringify(data));
+  }, [description, animalType, conditionTags, privacy]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -72,7 +97,6 @@ export default function ReportPage() {
   const handleSubmit = async () => {
     if (!file || !location) return;
 
-    // Zod validation check
     const validation = reportSchema.safeParse({ description, animalType, location });
     if (!validation.success) {
        addToast({ type: 'error', title: 'Validation Error', message: validation.error.errors[0].message });
@@ -88,6 +112,7 @@ export default function ReportPage() {
     formData.append('tags', JSON.stringify(conditionTags));
     formData.append('lat', location.lat.toString());
     formData.append('lng', location.lng.toString());
+    formData.append('privacy', privacy.toString());
 
     try {
       const res = await fetch('/api/reports', {
@@ -99,6 +124,7 @@ export default function ReportPage() {
 
       await res.json();
       addToast({ type: 'success', title: 'Report Submitted', message: 'Thank you for your help!' });
+      localStorage.removeItem('report_draft'); // Clear draft
       router.push('/');
     } catch (err) {
       console.error(err);
@@ -273,6 +299,19 @@ export default function ReportPage() {
                   Location pinned successfully
                 </div>
              )}
+           </div>
+
+           <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border">
+              <div className="flex items-center gap-3">
+                 <div className="p-2 bg-background rounded-full border border-border">
+                    <Lock className="h-4 w-4 text-muted-foreground" />
+                 </div>
+                 <div>
+                    <p className="text-sm font-medium">Protect Location</p>
+                    <p className="text-xs text-muted-foreground">Only show approximate area publicly</p>
+                 </div>
+              </div>
+              <Switch checked={privacy} onCheckedChange={setPrivacy} />
            </div>
         </div>
       )}

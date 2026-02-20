@@ -6,8 +6,8 @@ const prisma = new PrismaClient()
 async function main() {
   // Clear existing data to avoid duplicates in seed dev
   // Delete related models first
-  await prisma.comment.deleteMany();
-  await prisma.contactRequest.deleteMany();
+  await prisma.reportUpdate.deleteMany();
+  await prisma.helpOffer.deleteMany();
   await prisma.report.deleteMany();
   await prisma.vet.deleteMany();
 
@@ -62,6 +62,9 @@ async function main() {
       tags: JSON.stringify(['Friendly', 'Hungry']),
       locationLat: 40.7200,
       locationLng: -74.0100,
+      condition: JSON.stringify(['Friendly', 'Hungry']),
+      collar: true,
+      privacy: false
     },
     {
       imagePath: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=800',
@@ -73,6 +76,9 @@ async function main() {
       tags: JSON.stringify(['Scared', 'Kitten']),
       locationLat: 40.7150,
       locationLng: -74.0020,
+      condition: JSON.stringify(['Scared']),
+      collar: false,
+      privacy: true
     },
     {
       imagePath: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?auto=format&fit=crop&q=80&w=800',
@@ -84,25 +90,30 @@ async function main() {
       tags: JSON.stringify(['Friendly', 'No Collar']),
       locationLat: 34.0500,
       locationLng: -118.2400,
+      condition: JSON.stringify(['Friendly']),
+      collar: false,
+      privacy: false
     },
   ];
 
   for (const report of reports) {
     const r = await prisma.report.create({ data: report });
 
-    // Add sample comments
+    // Add sample comments/updates
     if (r.status === 'IN_REVIEW') {
-        await prisma.comment.create({
+        await prisma.reportUpdate.create({
             data: {
                 text: 'A volunteer is on the way to check the location.',
+                type: 'OFFICIAL',
                 reportId: r.id
             }
         });
     }
     if (r.status === 'RESCUED') {
-        await prisma.comment.create({
+        await prisma.reportUpdate.create({
             data: {
                 text: 'Update: The owner has been found! Reunited safely.',
+                type: 'OFFICIAL',
                 reportId: r.id
             }
         });

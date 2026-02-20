@@ -3,27 +3,27 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
-    const { name, contact, message, type } = await request.json();
+    const { name, contact, message, type, availability } = await request.json();
     const reportId = parseInt(params.id);
 
     if (!name || !contact || !reportId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const contactRequest = await prisma.contactRequest.create({
+    const helpOffer = await prisma.helpOffer.create({
       data: {
         name,
-        email: contact.includes('@') ? contact : undefined,
-        phone: !contact.includes('@') ? contact : undefined,
+        contact, // Storing combined as schema has 'contact' field
         message,
-        type,
+        helpType: type,
+        availability,
         reportId,
       },
     });
 
-    return NextResponse.json(contactRequest);
+    return NextResponse.json(helpOffer);
   } catch (error) {
-    console.error("Failed to post contact request:", error);
-    return NextResponse.json({ error: 'Failed to post contact request' }, { status: 500 });
+    console.error("Failed to post help offer:", error);
+    return NextResponse.json({ error: 'Failed to post help offer' }, { status: 500 });
   }
 }

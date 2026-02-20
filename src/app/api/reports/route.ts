@@ -5,12 +5,29 @@ import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { rateLimit } from '@/lib/rate-limit';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const reports = await prisma.report.findMany({
       orderBy: { createdAt: 'desc' },
     });
-    return NextResponse.json(reports);
+
+    // Handle Privacy: Obfuscate location if privacy is enabled
+    // This is a public feed, so we obfuscate for everyone for now.
+    // In a real app with auth, we would check if user is admin/owner.
+    const safeReports = reports.map(r => {
+        if (r.privacy) {
+            return {
+                ...r,
+                // Simple fuzzing: round to 2 decimals (~1.1km precision)
+                // or just don't send exact coordinates if you want to rely on the "approx" label
+                locationLat: r.locationLat ? Math.round(r.locationLat * 100) / 100 : null,
+                locationLng: r.locationLng ? Math.round(r.locationLng * 100) / 100 : null,
+            };
+        }
+        return r;
+    });
+
+    return NextResponse.json(safeReports);
   } catch (error) {
     console.error("Failed to fetch reports:", error);
     return NextResponse.json({ error: 'Failed to fetch reports' }, { status: 500 });
@@ -19,7 +36,6 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    // Basic Rate Limiting (using IP from headers or fallback)
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     if (!rateLimit(ip)) {
       return NextResponse.json({ error: 'Too many requests. Please wait.' }, { status: 429 });
@@ -32,6 +48,7 @@ export async function POST(request: Request) {
     const tags = formData.get('tags') as string;
     const lat = formData.get('lat') as string;
     const lng = formData.get('lng') as string;
+    const privacy = formData.get('privacy') === 'true';
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
@@ -39,13 +56,11 @@ export async function POST(request: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Create unique filename
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const extension = file.name.split('.').pop() || 'jpg';
     const filename = `report-${uniqueSuffix}.${extension}`;
     const uploadDir = join(process.cwd(), 'public/uploads');
 
-    // Ensure directory exists
     try {
       await mkdir(uploadDir, { recursive: true });
     } catch {
@@ -55,7 +70,6 @@ export async function POST(request: Request) {
     const filePath = join(uploadDir, filename);
     await writeFile(filePath, buffer);
 
-    // Analyze with Gemini
     let analysis = { breed: "Unknown", age: "Unknown", type: "unknown" };
     try {
        analysis = await analyzeImage(buffer, file.type || 'image/jpeg');
@@ -63,7 +77,6 @@ export async function POST(request: Request) {
        console.error("Analysis failed, proceeding with default", e);
     }
 
-    // Save to DB
     const report = await prisma.report.create({
       data: {
         imagePath: `/uploads/${filename}`,
@@ -75,6 +88,7 @@ export async function POST(request: Request) {
         animalType: animalType || analysis.type,
         tags: tags || "[]",
         status: 'REPORTED',
+        privacy: privacy,
       },
     });
 

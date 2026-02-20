@@ -21,33 +21,36 @@ model Report {
   animalType  String?
   tags        String? // JSON string
   status      String   @default("REPORTED") // REPORTED, IN_REVIEW, RESCUED, REUNITED
-  createdAt   DateTime @default(now())
 
-  // New fields
+  // Details
   condition   String? // JSON string
   collar      Boolean  @default(false)
   privacy     Boolean  @default(false) // true = obfuscated/approx location shown to public
 
-  comments    Comment[]
-  contactRequests ContactRequest[]
+  createdAt   DateTime @default(now())
+
+  updates     ReportUpdate[]
+  helpOffers  HelpOffer[]
 }
 
-model Comment {
+model ReportUpdate {
   id          Int      @id @default(autoincrement())
+  type        String   @default("COMMENT") // COMMENT, OFFICIAL, SIGHTING
   text        String
   imagePath   String?
+  isApproved  Boolean  @default(true) // Auto-approve for MVP
   createdAt   DateTime @default(now())
   reportId    Int
   report      Report   @relation(fields: [reportId], references: [id])
 }
 
-model ContactRequest {
+model HelpOffer {
   id          Int      @id @default(autoincrement())
   name        String
-  phone       String?
-  email       String?
+  contact     String?  // phone or email combined
   message     String?
-  type        String?  // foster, transport, donate
+  helpType    String?  // foster, transport, donate
+  availability String?
   createdAt   DateTime @default(now())
   reportId    Int
   report      Report   @relation(fields: [reportId], references: [id])

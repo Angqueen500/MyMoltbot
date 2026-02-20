@@ -5,21 +5,22 @@ import Image from 'next/image';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Calendar, Clock, Share2, MessageCircle, ArrowLeft } from 'lucide-react';
+import { MapPin, Calendar, Clock, Share2, MessageCircle, ArrowLeft, Send } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { Input } from '@/components/ui/input';
 import StatusPill from '@/components/ui/status-pill';
 import ActionButtons from '@/components/features/report/ActionButtons';
 import SafetyDisclaimer from '@/components/features/report/SafetyDisclaimer';
+import ReportTimeline from '@/components/features/report/ReportTimeline';
 import Link from 'next/link';
 
 const Map = dynamic(() => import('@/components/Map'), { ssr: false });
 
-// Types... (can be imported from prisma types if generated, but kept here for now)
-type Comment = {
+type Update = {
   id: number;
+  type: string;
   text: string;
-  createdAt: string; // serialized date
+  createdAt: string;
 };
 
 type ReportDetail = {
@@ -30,17 +31,18 @@ type ReportDetail = {
   age: string;
   animalType: string;
   status: string;
-  createdAt: string; // serialized date
+  createdAt: string;
   locationLat: number | null;
   locationLng: number | null;
+  privacy: boolean;
   tags: string;
-  comments: Comment[];
+  updates: Update[];
 };
 
 export default function ReportDetailClient({ report }: { report: ReportDetail }) {
   const { addToast } = useToast();
-  const [comments, setComments] = useState<Comment[]>(report.comments);
-  const [newComment, setNewComment] = useState('');
+  const [updates, setUpdates] = useState<Update[]>(report.updates);
+  const [newUpdate, setNewUpdate] = useState('');
   const tags = JSON.parse(report.tags || '[]');
 
   const handleCopyLink = () => {
@@ -48,18 +50,18 @@ export default function ReportDetailClient({ report }: { report: ReportDetail })
     addToast({ type: 'success', title: 'Link Copied', message: 'Share it to help find a home!' });
   };
 
-  const handlePostComment = async () => {
-    if (!newComment.trim()) return;
+  const handlePostUpdate = async () => {
+    if (!newUpdate.trim()) return;
     try {
-      const res = await fetch(`/api/reports/${report.id}/comments`, {
+      const res = await fetch(`/api/reports/${report.id}/updates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: newComment }),
+        body: JSON.stringify({ text: newUpdate, type: 'SIGHTING' }), // Default to sighting for community
       });
       if (!res.ok) throw new Error('Failed');
-      const comment = await res.json();
-      setComments([comment, ...comments]);
-      setNewComment('');
+      const update = await res.json();
+      setUpdates([update, ...updates]);
+      setNewUpdate('');
       addToast({ type: 'success', title: 'Update Posted' });
     } catch {
       addToast({ type: 'error', title: 'Error', message: 'Could not post update.' });
@@ -132,13 +134,17 @@ export default function ReportDetailClient({ report }: { report: ReportDetail })
 
         {/* Location */}
         <div className="space-y-3">
-             <h3 className="font-semibold text-lg">Location</h3>
+             <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-lg">Location</h3>
+                {report.privacy && <Badge variant="outline" className="text-xs">Approximate Area</Badge>}
+             </div>
+
              <div className="h-64 w-full rounded-xl overflow-hidden relative z-0 border border-border bg-muted">
                {report.locationLat && report.locationLng ? (
                  <Map
                    center={[report.locationLat, report.locationLng]}
-                   zoom={15}
-                   markers={[{ lat: report.locationLat, lng: report.locationLng, title: 'Report Location' }]}
+                   zoom={report.privacy ? 13 : 15}
+                   markers={[{ lat: report.locationLat, lng: report.locationLng, title: report.privacy ? 'Approximate Area' : 'Report Location' }]}
                  />
                ) : (
                  <div className="h-full flex items-center justify-center text-muted-foreground">
@@ -149,51 +155,35 @@ export default function ReportDetailClient({ report }: { report: ReportDetail })
              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                <MapPin className="h-4 w-4 shrink-0" />
                <span>
-                 {report.locationLat ? `${report.locationLat.toFixed(4)}, ${report.locationLng?.toFixed(4)}` : 'Location unknown'}
+                 {report.locationLat
+                    ? (report.privacy ? 'Location hidden for safety' : `${report.locationLat.toFixed(4)}, ${report.locationLng?.toFixed(4)}`)
+                    : 'Location unknown'}
                </span>
              </div>
         </div>
 
         <SafetyDisclaimer />
 
-        {/* Comments Section */}
-        <div className="space-y-4 pt-6 border-t border-border">
-          <h3 className="text-xl font-semibold flex items-center gap-2">
-            <MessageCircle className="h-5 w-5" />
-            Community Updates
-          </h3>
-
-          <div className="flex gap-2">
-            <Input
-              placeholder="Add an update or comment..."
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              className="bg-secondary/30"
-              onKeyDown={(e) => e.key === 'Enter' && handlePostComment()}
-            />
-            <Button onClick={handlePostComment} disabled={!newComment.trim()}>Post</Button>
-          </div>
-
-          <div className="space-y-4 mt-4">
-            {comments.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8 text-sm italic">No updates yet. Be the first to help!</p>
-            ) : (
-              comments.map((comment) => (
-                <div key={comment.id} className="flex gap-3">
-                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs shrink-0">
-                     U
-                   </div>
-                   <div className="space-y-1">
-                      <div className="bg-secondary/30 p-3 rounded-lg rounded-tl-none text-sm">
-                        <p>{comment.text}</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground pl-1">
-                        {formatDistanceToNow(new Date(comment.createdAt))} ago
-                      </p>
-                   </div>
+        {/* Timeline & Updates */}
+        <div className="pt-6 border-t border-border">
+          <div className="flex flex-col gap-6">
+             <div className="bg-secondary/20 p-4 rounded-xl space-y-3">
+                <h4 className="font-medium text-sm">Have you seen this animal?</h4>
+                <div className="flex gap-2">
+                    <Input
+                        placeholder="Add a sighting or update..."
+                        value={newUpdate}
+                        onChange={(e) => setNewUpdate(e.target.value)}
+                        className="bg-background"
+                        onKeyDown={(e) => e.key === 'Enter' && handlePostUpdate()}
+                    />
+                    <Button size="icon" onClick={handlePostUpdate} disabled={!newUpdate.trim()}>
+                        <Send className="h-4 w-4" />
+                    </Button>
                 </div>
-              ))
-            )}
+             </div>
+
+             <ReportTimeline updates={updates} />
           </div>
         </div>
       </div>
