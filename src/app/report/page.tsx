@@ -3,16 +3,28 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Loader2, Camera, MapPin, Check, AlertTriangle } from 'lucide-react';
+import { Loader2, Camera, MapPin, Check, AlertTriangle, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
+import { Label } from '@/components/ui/label';
 import Image from 'next/image';
+import { z } from 'zod';
 
 const Map = dynamic(() => import('@/components/Map'), { ssr: false });
+
+const reportSchema = z.object({
+  description: z.string().min(10, "Please provide more detail"),
+  animalType: z.string().min(1, "Type is required"),
+  location: z.object({
+    lat: z.number(),
+    lng: z.number(),
+  }).nullable().refine((val) => val !== null, "Location is required"),
+});
 
 export default function ReportPage() {
   const router = useRouter();
@@ -34,6 +46,12 @@ export default function ReportPage() {
     }
   };
 
+  const handleRemovePhoto = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFile(null);
+    setPreview(null);
+  };
+
   const toggleTag = (tag: string) => {
     setConditionTags(prev =>
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
@@ -44,8 +62,23 @@ export default function ReportPage() {
     setLocation({ lat, lng });
   };
 
+  const validateStep = () => {
+    if (step === 1) return !!file;
+    if (step === 2) return !!animalType;
+    if (step === 3) return !!location;
+    return true;
+  };
+
   const handleSubmit = async () => {
-    if (!file) return;
+    if (!file || !location) return;
+
+    // Zod validation check
+    const validation = reportSchema.safeParse({ description, animalType, location });
+    if (!validation.success) {
+       addToast({ type: 'error', title: 'Validation Error', message: validation.error.errors[0].message });
+       return;
+    }
+
     setLoading(true);
 
     const formData = new FormData();
@@ -53,10 +86,8 @@ export default function ReportPage() {
     formData.append('description', description);
     formData.append('animalType', animalType);
     formData.append('tags', JSON.stringify(conditionTags));
-    if (location) {
-      formData.append('lat', location.lat.toString());
-      formData.append('lng', location.lng.toString());
-    }
+    formData.append('lat', location.lat.toString());
+    formData.append('lng', location.lng.toString());
 
     try {
       const res = await fetch('/api/reports', {
@@ -78,13 +109,10 @@ export default function ReportPage() {
   };
 
   const nextStep = () => {
-    if (step === 1 && !file) {
-      addToast({ type: 'error', title: 'Photo Required', message: 'Please take a photo first.' });
-      return;
-    }
-    if (step === 2 && !animalType) {
-       addToast({ type: 'error', title: 'Type Required', message: 'Please select an animal type.' });
-       return;
+    if (!validateStep()) {
+        const msg = step === 1 ? 'Photo Required' : step === 2 ? 'Type Required' : 'Location Required';
+        addToast({ type: 'error', title: msg });
+        return;
     }
     setStep(s => s + 1);
   };
@@ -92,27 +120,35 @@ export default function ReportPage() {
   const prevStep = () => setStep(s => s - 1);
 
   return (
-    <div className="max-w-md mx-auto pb-32 space-y-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Report Stray</h1>
-        <div className="text-sm text-muted-foreground">Step {step} of 3</div>
+    <div className="max-w-md mx-auto pb-32 space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Report a Stray</h1>
+        <p className="text-muted-foreground text-sm">Help us locate and rescue animals in need.</p>
       </div>
 
-      {/* Progress Bar */}
-      <div className="h-1 w-full bg-secondary rounded-full overflow-hidden">
-        <div
-          className="h-full bg-primary transition-all duration-300 ease-out"
-          style={{ width: `${(step / 3) * 100}%` }}
-        />
+      {/* Steps Indicator */}
+      <div className="flex justify-between items-center px-2">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center">
+            <div className={clsx(
+              "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300",
+              step >= i ? "bg-primary text-primary-foreground shadow-md scale-110" : "bg-muted text-muted-foreground"
+            )}>
+              {i}
+            </div>
+            {i < 3 && <div className={clsx("w-12 h-1 mx-2 rounded-full", step > i ? "bg-primary" : "bg-muted")} />}
+          </div>
+        ))}
       </div>
 
       {/* Step 1: Photo */}
       {step === 1 && (
-        <div className="space-y-4 animate-in slide-in-from-right-4 fade-in duration-300">
-          <Card className="border-dashed border-2 overflow-hidden bg-muted/30">
+        <div className="space-y-6 animate-in slide-in-from-right-8 fade-in duration-300">
+          <Card className="border-dashed border-2 overflow-hidden bg-muted/20 hover:bg-muted/30 transition-colors border-primary/20">
             <div
-              className="relative aspect-square flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors"
-              onClick={() => document.getElementById('file-upload')?.click()}
+              className="relative aspect-[4/3] flex flex-col items-center justify-center cursor-pointer"
+              onClick={() => !preview && document.getElementById('file-upload')?.click()}
             >
               <input
                 id="file-upload"
@@ -123,38 +159,56 @@ export default function ReportPage() {
                 className="hidden"
               />
               {preview ? (
-                <Image src={preview} alt="Preview" fill className="object-cover" unoptimized />
+                <>
+                  <Image src={preview} alt="Preview" fill className="object-cover" unoptimized />
+                  <Button
+                    size="icon"
+                    variant="destructive"
+                    className="absolute top-2 right-2 rounded-full h-8 w-8 shadow-sm"
+                    onClick={handleRemovePhoto}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </>
               ) : (
-                <div className="text-center p-6">
-                  <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 text-primary">
+                <div className="text-center p-6 space-y-3">
+                  <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto text-primary">
                     <Camera className="h-8 w-8" />
                   </div>
-                  <h3 className="font-semibold text-lg">Take a Photo</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Tap to open camera or gallery</p>
+                  <div>
+                    <h3 className="font-semibold text-lg">Take a Photo</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Tap to open camera or gallery</p>
+                  </div>
                 </div>
               )}
             </div>
           </Card>
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg flex gap-3 items-start text-sm text-blue-800 dark:text-blue-200">
-            <AlertTriangle className="h-5 w-5 shrink-0" />
-            <p>Make sure the animal is clearly visible. Do not put yourself in danger to take a photo.</p>
+
+          <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-xl flex gap-3 items-start border border-blue-100 dark:border-blue-900/20">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Safety First</p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                Do not approach if the animal looks aggressive. Zoom in instead of getting too close.
+              </p>
+            </div>
           </div>
         </div>
       )}
 
       {/* Step 2: Details */}
       {step === 2 && (
-        <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
+        <div className="space-y-6 animate-in slide-in-from-right-8 fade-in duration-300">
           <div className="space-y-3">
-            <label className="text-sm font-medium">Animal Type</label>
+            <Label>What is it?</Label>
             <div className="grid grid-cols-3 gap-3">
               {['Dog', 'Cat', 'Other'].map(type => (
                 <button
                   key={type}
                   onClick={() => setAnimalType(type)}
                   className={clsx(
-                    "flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all",
-                    animalType === type ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/50"
+                    "flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02]",
+                    animalType === type ? "border-primary bg-primary/5 text-primary shadow-sm" : "border-muted bg-card hover:border-primary/30"
                   )}
                 >
                   <span className="text-lg font-semibold">{type}</span>
@@ -164,13 +218,16 @@ export default function ReportPage() {
           </div>
 
           <div className="space-y-3">
-            <label className="text-sm font-medium">Condition (Select all that apply)</label>
+            <Label>Condition</Label>
             <div className="flex flex-wrap gap-2">
-              {['Injured', 'Sick', 'Friendly', 'Aggressive', 'Puppy/Kitten', 'With Mother'].map(tag => (
+              {['Injured', 'Sick', 'Friendly', 'Scared', 'Aggressive', 'Puppy/Kitten', 'With Mother', 'Collar'].map(tag => (
                 <Badge
                   key={tag}
                   variant={conditionTags.includes(tag) ? "default" : "outline"}
-                  className="cursor-pointer px-3 py-1.5 text-sm"
+                  className={clsx(
+                    "cursor-pointer px-3 py-1.5 text-sm transition-all hover:opacity-80 active:scale-95 select-none",
+                    conditionTags.includes(tag) ? "shadow-sm" : "bg-background"
+                  )}
                   onClick={() => toggleTag(tag)}
                 >
                   {tag}
@@ -180,12 +237,12 @@ export default function ReportPage() {
           </div>
 
           <div className="space-y-3">
-            <label className="text-sm font-medium">Additional Details</label>
+            <Label>Notes</Label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the situation..."
-              className="h-32"
+              placeholder="Describe the situation, location details, or distinctive markings..."
+              className="h-32 resize-none bg-card"
             />
           </div>
         </div>
@@ -193,27 +250,27 @@ export default function ReportPage() {
 
       {/* Step 3: Location */}
       {step === 3 && (
-        <div className="space-y-4 animate-in slide-in-from-right-4 fade-in duration-300">
+        <div className="space-y-4 animate-in slide-in-from-right-8 fade-in duration-300">
            <div className="space-y-2">
-             <label className="text-sm font-medium flex items-center gap-2">
+             <Label className="flex items-center gap-2">
                <MapPin className="h-4 w-4" />
-               Pin Location
-             </label>
-             <div className="h-80 w-full rounded-xl overflow-hidden border border-border relative z-0 shadow-sm">
+               Pin Exact Location
+             </Label>
+             <div className="h-[400px] w-full rounded-xl overflow-hidden border border-border relative z-0 shadow-sm bg-muted">
                 <Map
                   onLocationSelect={handleMapClick}
                   selectedLocation={location}
                 />
                  {!location && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-background/90 px-4 py-2 rounded-full shadow-lg z-[400] text-sm font-medium text-foreground pointer-events-none border border-border">
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-background/90 backdrop-blur px-4 py-2 rounded-full shadow-lg z-[400] text-sm font-medium text-foreground pointer-events-none border border-border animate-bounce">
                       Tap map to pin location
                     </div>
                  )}
              </div>
              {location && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary/50 p-2 rounded-lg">
-                  <Check className="h-4 w-4 text-green-500" />
-                  Location pinned: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-100 p-3 rounded-lg dark:bg-green-900/20 dark:text-green-300 dark:border-green-900/30">
+                  <Check className="h-4 w-4" />
+                  Location pinned successfully
                 </div>
              )}
            </div>
@@ -221,18 +278,18 @@ export default function ReportPage() {
       )}
 
       {/* Navigation Buttons */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t border-border z-10 flex gap-3 max-w-md mx-auto md:relative md:border-0 md:bg-transparent md:p-0">
+      <div className="flex gap-4 pt-4">
         {step > 1 && (
-          <Button variant="outline" onClick={prevStep} className="flex-1" disabled={loading}>
-            Back
+          <Button variant="outline" size="lg" onClick={prevStep} className="flex-1" disabled={loading}>
+            <ChevronLeft className="mr-2 h-4 w-4" /> Back
           </Button>
         )}
         {step < 3 ? (
-          <Button onClick={nextStep} className="flex-1">
-            Next
+          <Button size="lg" onClick={nextStep} className={clsx("flex-1", step === 1 && "w-full")}>
+            Next <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
         ) : (
-          <Button onClick={handleSubmit} className="flex-1" disabled={loading || !location}>
+          <Button size="lg" onClick={handleSubmit} className="flex-1" disabled={loading || !location}>
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -18,10 +18,15 @@ model Report {
   locationLng Float?
   breed       String?
   age         String?
-  animalType  String? // Added
+  animalType  String?
   tags        String? // JSON string
-  status      String   @default("REPORTED") // REPORTED, IN_REVIEW, RESCUED
+  status      String   @default("REPORTED") // REPORTED, IN_REVIEW, RESCUED, REUNITED
   createdAt   DateTime @default(now())
+
+  // New fields
+  condition   String? // JSON string
+  collar      Boolean  @default(false)
+  privacy     Boolean  @default(false) // true = obfuscated/approx location shown to public
 
   comments    Comment[]
   contactRequests ContactRequest[]
@@ -42,6 +47,7 @@ model ContactRequest {
   phone       String?
   email       String?
   message     String?
+  type        String?  // foster, transport, donate
   createdAt   DateTime @default(now())
   reportId    Int
   report      Report   @relation(fields: [reportId], references: [id])

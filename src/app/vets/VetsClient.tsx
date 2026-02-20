@@ -5,11 +5,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Phone, Clock, MapPin, Navigation, Search, List, Map as MapIcon, Copy, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Phone, Clock, MapPin, Navigation, Search, List, Map as MapIcon, Copy, ShieldCheck, AlertTriangle, Stethoscope, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
 import useGeolocation from '@/hooks/useGeolocation';
 import { getDistanceFromLatLonInKm } from '@/lib/distance';
+import InjuredGuideModal from '@/components/features/vets/InjuredGuideModal';
 
 const Map = dynamic(() => import('@/components/Map'), { ssr: false });
 
@@ -28,16 +29,21 @@ type Vet = {
 
 export default function VetsClient({ vets }: { vets: Vet[] }) {
   const [search, setSearch] = useState('');
-  const [showMap, setShowMap] = useState(true);
+  const [showMap, setShowMap] = useState(false);
+  const [filterEmergency, setFilterEmergency] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const { addToast } = useToast();
   const { location: userLocation } = useGeolocation();
 
-  // Use useMemo instead of useEffect to derive state
   const sortedVets = useMemo(() => {
     let result = vets.filter(vet =>
       vet.name.toLowerCase().includes(search.toLowerCase()) ||
       vet.address.toLowerCase().includes(search.toLowerCase())
     );
+
+    if (filterEmergency) {
+        result = result.filter(vet => vet.emergency);
+    }
 
     if (userLocation) {
       result = [...result].sort((a, b) => {
@@ -47,7 +53,7 @@ export default function VetsClient({ vets }: { vets: Vet[] }) {
       });
     }
     return result;
-  }, [search, userLocation, vets]);
+  }, [search, userLocation, vets, filterEmergency]);
 
   const copyAddress = (address: string) => {
     navigator.clipboard.writeText(address);
@@ -67,17 +73,35 @@ export default function VetsClient({ vets }: { vets: Vet[] }) {
 
   return (
     <div className="space-y-4 pb-32 h-[calc(100vh-8rem)] flex flex-col">
-      {/* Search & Toggle */}
-      <div className="flex gap-2">
+      {/* Header Actions */}
+      <div className="flex justify-between items-center px-1">
+         <h1 className="text-2xl font-bold tracking-tight">Nearby Vets</h1>
+         <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setShowGuide(true)}>
+            <AlertTriangle className="mr-1 h-4 w-4" />
+            Injured Animal?
+         </Button>
+      </div>
+
+      {/* Search & Controls */}
+      <div className="flex gap-2 sticky top-0 bg-background z-10 py-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search clinics..."
-            className="pl-9"
+            className="pl-9 h-10 bg-secondary/50 border-transparent focus:bg-background transition-colors"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <Button
+            variant={filterEmergency ? "destructive" : "outline"}
+            size="icon"
+            onClick={() => setFilterEmergency(!filterEmergency)}
+            className="shrink-0"
+            aria-label="Filter Emergency"
+        >
+            <Stethoscope className="h-4 w-4" />
+        </Button>
         <Button
           variant="outline"
           size="icon"
@@ -88,11 +112,11 @@ export default function VetsClient({ vets }: { vets: Vet[] }) {
         </Button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 h-full overflow-hidden">
+      <div className="flex flex-col md:flex-row gap-4 h-full overflow-hidden relative">
         {/* Map View - Collapsible on Mobile */}
         <div className={cn(
-          "h-64 md:h-full md:flex-1 rounded-xl overflow-hidden border border-border relative z-0 shadow-sm transition-all duration-300",
-          showMap ? "block" : "hidden md:block"
+          "h-full w-full absolute inset-0 md:relative md:flex-1 rounded-xl overflow-hidden border border-border z-0 shadow-sm transition-all duration-300 bg-background",
+          showMap ? "z-20 block" : "hidden md:block"
         )}>
           {markers.length > 0 ? (
             <Map markers={markers} zoom={13} center={initialCenter} />
@@ -101,73 +125,79 @@ export default function VetsClient({ vets }: { vets: Vet[] }) {
               No locations found
             </div>
           )}
+          {/* Map Close Button (Mobile Only) */}
+          <Button
+            className="absolute top-4 right-4 md:hidden shadow-lg z-[400]"
+            size="sm"
+            onClick={() => setShowMap(false)}
+          >
+            Show List
+          </Button>
         </div>
 
         {/* List View */}
         <div className={cn(
-          "flex-1 overflow-y-auto pr-1 space-y-3 scrollbar-hide",
-          !showMap ? "block" : "hidden md:block"
+          "flex-1 overflow-y-auto pr-1 space-y-3 scrollbar-hide pb-20",
+          showMap ? "hidden md:block" : "block"
         )}>
           {sortedVets.length === 0 ? (
-             <div className="text-center py-10 text-muted-foreground">
-               No veterinarians found.
+             <div className="text-center py-10 text-muted-foreground flex flex-col items-center">
+               <Stethoscope className="h-10 w-10 mb-2 opacity-20" />
+               <p>No veterinarians found.</p>
              </div>
           ) : (
             sortedVets.map((vet) => (
-              <Card key={vet.id} className="hover:shadow-md transition-shadow">
+              <Card key={vet.id} className="hover:shadow-md transition-all border-border/50">
                 <CardContent className="p-4 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-1">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <h3 className="font-bold text-lg leading-tight">{vet.name}</h3>
-                        {vet.verified && <ShieldCheck className="w-4 h-4 text-blue-500" aria-label="Verified" />}
+                        {vet.verified && <ShieldCheck className="w-4 h-4 text-blue-500 shrink-0" aria-label="Verified" />}
+                        {vet.emergency && (
+                            <Badge variant="destructive" className="text-[10px] h-5 px-1.5 flex items-center gap-1">
+                                24/7
+                            </Badge>
+                        )}
                       </div>
-                      <div className="flex items-start gap-2 text-sm text-muted-foreground mt-1">
-                        <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
-                        <span>{vet.address}</span>
-                        <button onClick={() => copyAddress(vet.address)} className="text-muted-foreground hover:text-foreground">
-                          <Copy className="w-3 h-3" />
-                        </button>
+                      <div className="flex items-start gap-2 text-sm text-muted-foreground mt-1.5 group cursor-pointer" onClick={() => copyAddress(vet.address)}>
+                        <MapPin className="w-4 h-4 mt-0.5 shrink-0 group-hover:text-primary transition-colors" />
+                        <span className="group-hover:text-foreground transition-colors">{vet.address}</span>
                       </div>
                       {userLocation && vet.locationLat && vet.locationLng && (
-                         <p className="text-xs text-muted-foreground mt-1 font-medium">
+                         <p className="text-xs text-muted-foreground mt-1 font-medium pl-6">
                            {getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, vet.locationLat, vet.locationLng).toFixed(1)}km away
                          </p>
                       )}
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                        {vet.emergency && (
-                        <Badge variant="destructive" className="shrink-0 text-[10px] flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            24/7 Emergency
-                        </Badge>
-                        )}
-                        {vet.specialties && JSON.parse(vet.specialties).map((spec: string) => (
-                            <Badge key={spec} variant="secondary" className="text-[10px]">{spec}</Badge>
-                        ))}
-                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary/30 p-2 rounded-lg">
                     <Clock className="w-4 h-4 shrink-0" />
                     <span>{vet.hours || 'Call for hours'}</span>
                   </div>
 
-                  <div className="flex gap-2 pt-2">
-                    <Button asChild variant="default" size="sm" className="flex-1">
+                  <div className="flex flex-wrap gap-1">
+                    {vet.specialties && JSON.parse(vet.specialties).map((spec: string) => (
+                        <Badge key={spec} variant="outline" className="text-[10px] font-normal text-muted-foreground bg-background">{spec}</Badge>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3 pt-1">
+                    <Button asChild variant="default" className="flex-1 shadow-sm">
                       <a href={`tel:${vet.phone}`}>
                         <Phone className="w-4 h-4 mr-2" />
                         Call
                       </a>
                     </Button>
-                    <Button asChild variant="outline" size="sm" className="flex-1">
+                    <Button asChild variant="secondary" className="flex-1">
                       <a
                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(vet.name + ' ' + vet.address)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
                         <Navigation className="w-4 h-4 mr-2" />
-                        Directions
+                        Map
                       </a>
                     </Button>
                   </div>
@@ -177,6 +207,8 @@ export default function VetsClient({ vets }: { vets: Vet[] }) {
           )}
         </div>
       </div>
+
+      <InjuredGuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} />
     </div>
   );
 }

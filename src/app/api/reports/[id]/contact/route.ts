@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
-    const { name, contact, message } = await request.json();
+    const { name, contact, message, type } = await request.json();
     const reportId = parseInt(params.id);
 
     if (!name || !contact || !reportId) {
@@ -16,6 +16,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         email: contact.includes('@') ? contact : undefined,
         phone: !contact.includes('@') ? contact : undefined,
         message,
+        type,
         reportId,
       },
     });
